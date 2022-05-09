@@ -40,6 +40,8 @@ namespace pitermarx.SqlDependency
         /// <summary> A way to instanciate a new DbContext </summary>
         private Func<TContext> contextMaker;
 
+        private Microsoft.Data.SqlClient.SqlDependency dependency;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="EntityNotifier{TEntity,TContext}"/> class.
         /// </summary>
@@ -77,30 +79,37 @@ namespace pitermarx.SqlDependency
             using var command = new SqlCommand { CommandText = commandText, Connection = connection };
             connection.Open();
 
-            new Microsoft.Data.SqlClient.SqlDependency(command).OnChange += (s, e) =>
-                {
-                        // test if it was disposed
-                        if (contextMaker == null)
-                    {
-                        return;
-                    }
+            // unregister
+            if (dependency != null)
+                dependency.OnChange -= OnChangeEventHandler;
 
-                        // continue monitoring
-                        RegisterNotification();
-
-                        // call the changed event on a new thread
-                        if (e.Type == SqlNotificationType.Change && changed != null)
-                    {
-                        Task.Run(() =>
-                            {
-                                using var ctx = contextMaker();
-                                changed(query(ctx));
-                            });
-                    }
-                };
+            dependency = new Microsoft.Data.SqlClient.SqlDependency(command);
+            dependency.OnChange += OnChangeEventHandler;
 
             // NOTE: You have to execute the command, or the notification will never fire.
             using (command.ExecuteReader()) { }
+        }
+        
+        private void OnChangeEventHandler(object sender, Microsoft.Data.SqlClient.SqlNotificationEventArgs e)
+        {
+            // test if it was disposed
+            if (contextMaker == null)
+            {
+                return;
+            }
+
+            // continue monitoring
+            RegisterNotification();
+
+            // call the changed event on a new thread
+            if (e.Type == SqlNotificationType.Change && changed != null)
+            {
+                Task.Run(() =>
+                {
+                    using var ctx = contextMaker();
+                    changed(query(ctx));
+                });
+            }
         }
 
         public IDisposable OnChange(Action<IQueryable<TEntity>> handler)
@@ -115,6 +124,8 @@ namespace pitermarx.SqlDependency
             {
                 return;
             }
+
+            dependency.OnChange -= OnChangeEventHandler;
 
             contextMaker = null;
 

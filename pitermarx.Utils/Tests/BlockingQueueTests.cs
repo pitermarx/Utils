@@ -50,7 +50,7 @@ namespace pitermarx.Tests
             Assert.Equal(1000, remaining.Length + processed.Count);
             Assert.True(remaining.Length >= 800);
             Assert.True(processed.Count <= 200);
-            Assert.True(processed.Count > 85);
+            Assert.True(processed.Count > 80);
         }
 
         [Fact]
